@@ -1,9 +1,8 @@
-# Scan computers for plug and play device errors and status issues (degraded or unknown).
 <#
-.DESCRIPTION
+.SYNOPSIS
 Get-PnpIssues scans a computer or computers for plug and play device errors and status issues 
 (degrated or unknown).
-.SYNOPSIS
+.DESCRIPTION
 Get-PnpIssues scans one or more computers for errors and degraded or unknown status. Uses PowerShell
 Remoting to get attached plug and play device status and presents data as a formatted table.
 .PARAMETER ComputerName
