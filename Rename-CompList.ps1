@@ -1,56 +1,70 @@
+function Rename-ComputerList {
 <#
 .SYNOPSIS
-Renames multiple computers using a mapping defined in a CSV file.
+Renames multiple computers using specified current and new names.
 
 .DESCRIPTION
-This script reads a CSV file containing CurrentName and NewName columns and renames each computer
-accordingly using the Rename-Computer cmdlet. It handles empty entries, trims whitespace, and 
-provides per-computer error handling to ensure the loop continues even if a rename fails. 
-The script is designed to be safe for batch operations and logs successes and failures for review.
+This advanced function takes two string arrays—CurrentNames and NewNames—and renames each computer
+accordingly using the Rename-Computer cmdlet. It handles empty entries, trims whitespace, and provides
+per-computer error handling to ensure the loop continues even if a rename fails. Each element in CurrentNames
+is matched with the corresponding element in NewNames by index.
 
-.PARAMETER CsvPath
-The path to the CSV file containing the computer rename mapping. The CSV must have headers:
-CurrentName and NewName.
+.PARAMETER CurrentNames
+A string array containing the current names of the computers to be renamed.
+
+.PARAMETER NewNames
+A string array containing the new names for the computers. Each element corresponds by index to the
+CurrentNames array.
 
 .PARAMETER Force
-Optional switch to force the rename without prompting. Default is $true.
+Optional switch to force the rename operation without prompting. Default is $true.
 
 .EXAMPLE
-.\Rename-ComputersFromCsv.ps1 -CsvPath "C:\Scripts\rename-map.csv"
+Rename-Computers -CurrentNames @('PC01','PC02') -NewNames @('PC101','PC102')
 
-Renames all computers listed in rename-map.csv, forcing the operation and logging results to the console.
+Renames PC01 to PC101 and PC02 to PC102, forcing the operation and logging results to the console.
 
 .EXAMPLE
-.\Rename-ComputersFromCsv.ps1 -CsvPath "C:\Scripts\rename-map.csv" -Force $false
+Rename-Computers -CurrentNames @('PC01','PC02') -NewNames @('PC101','PC102') -Force $false
 
-Runs the rename process but prompts for confirmation for each computer rename.
+Renames the computers but prompts for confirmation for each rename.
 
 .NOTES
-- Ensure the account running the script has administrative privileges on all target machines.
+- Ensure the account running the function has administrative privileges on all target machines.
 - WinRM and network access must allow remote renaming if computers are not local.
-- The CSV must be properly formatted; extra columns or duplicate headers may cause unexpected behavior.
-
+- CurrentNames and NewNames arrays must be the same length; otherwise the extra elements are ignored.
 #>
 
-$RenameList = Import-Csv .\rename-map.csv
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string[]] $CurrentNames,
 
-$CurrentNames = $csv[0].CurrentName
-$NewNames     = $csv[0].NewName
+        [Parameter(Mandatory=$true)]
+        [string[]] $NewNames,
 
-# Loop over indices using ForEach-Object
-0..($CurrentNames.Count - 1) | ForEach-Object {
-    $Current = $currentNames[$_].Trim()
-    $New     = $newNames[$_].Trim()
+        [Parameter()]
+        [switch] $Force = $true
+    )
 
-    if (-not [string]::IsNullOrWhiteSpace($Current) -and -not [string]::IsNullOrWhiteSpace($New)) {
-        try {
-            Rename-Computer -ComputerName $Current -NewName $new -Force -ErrorAction Stop
-            Write-Host "Successfully renamed $Current to $New"
+    # Determine the smaller count to prevent index errors
+    $Count = [Math]::Min($CurrentNames.Count, $NewNames.Count)
+
+    0..($Count - 1) | ForEach-Object {
+        $Current = $CurrentNames[$_].Trim()
+        $New     = $NewNames[$_].Trim()
+
+        if (-not [string]::IsNullOrWhiteSpace($Current) -and -not [string]::IsNullOrWhiteSpace($New)) {
+            try {
+                Rename-Computer -ComputerName $Current -NewName $New -Force:$Force -ErrorAction Stop
+                Write-Host "Successfully renamed $Current to $New"
+            }
+            catch {
+                Write-Warning "Failed to rename $Current to $New. Error: $_"
+            }
         }
-        catch {
-            Write-Warning "Failed to rename $Current to $New. Error: $_"
+        else {
+            Write-Host "Skipping empty entry at index $_"
         }
-    } else {
-        Write-Host "Skipping empty entry at index $_"
     }
 }
