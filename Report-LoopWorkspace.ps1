@@ -1,26 +1,28 @@
 # Report-LoopWorkSpaces.PS1
-# Reports Loop workspaces across all SharePoint Online geo locations.
-# V2.0 Multi-geo rewrite
+# Reports Loop workspaces across all SharePoint Online tenants/geo locations.
+# V2.1 Multi-tenant support
+#
+# Usage:
+#   .\Report-LoopWorkspace.ps1
+#   .\Report-LoopWorkspace.ps1 -Tenants @{ NAM = 'https://contoso-admin.sharepoint.com'; CAN = 'https://contoso-ca-admin.sharepoint.com' }
+
+param(
+    [hashtable]$Tenants = @{
+        NAM = 'https://contoso-admin.sharepoint.com'
+        CAN = 'https://contoso-ca-admin.sharepoint.com'
+    }
+)
 
 # --- Connections ---
 
 Connect-MgGraph -NoWelcome -Scopes Directory.Read.All
-
-$TenantPrefix = ((Get-MgOrganization).VerifiedDomains | Where-Object { $_.IsDefault }).Name.Split('.')[0]
-$PrimaryAdminUrl = "https://$TenantPrefix-admin.sharepoint.com"
-
 Import-Module Microsoft.Online.SharePoint.PowerShell -UseWindowsPowerShell
-Connect-SPOService -Url $PrimaryAdminUrl
 
-# --- Discover all geo locations ---
-# Get-SPOGeoStorageQuota returns one object per geo with GeoLocation (NAM/EUR/APC/etc.)
-# and TenantAdminSiteUrl. Falls back to a single-geo array if the tenant isn't multi-geo.
-
-[array]$Geos = Get-SPOGeoStorageQuota
-If (-not $Geos) {
-    $Geos = @([PSCustomObject]@{ GeoLocation = 'NAM'; TenantAdminSiteUrl = $PrimaryAdminUrl })
+# Build geo list from the Tenants parameter - sorted so output is consistent
+[array]$Geos = $Tenants.GetEnumerator() | Sort-Object Key | ForEach-Object {
+    [PSCustomObject]@{ GeoLocation = $_.Key; TenantAdminSiteUrl = $_.Value }
 }
-Write-Host ("Geo locations found: {0}" -f ($Geos.GeoLocation -join ', '))
+Write-Host ("Tenants to process: {0}" -f ($Geos.GeoLocation -join ', '))
 
 # --- Constants ---
 
@@ -44,9 +46,10 @@ $TotalBytes = 0
 ForEach ($Geo in $Geos) {
     Write-Host ("`n=== {0} ({1}) ===" -f $Geo.GeoLocation, $Geo.TenantAdminSiteUrl)
 
-    # Reconnect for each satellite geo (each has its own admin endpoint)
-    If ($Geo.TenantAdminSiteUrl -ne $PrimaryAdminUrl) {
-        Connect-SPOService -Url $Geo.TenantAdminSiteUrl
+    Connect-SPOService -Url $Geo.TenantAdminSiteUrl
+    If (-not (Get-SPOTenant)) {
+        Write-Host ("Failed to connect to {0} - skipping" -f $Geo.TenantAdminSiteUrl) -ForegroundColor Red
+        Continue
     }
 
     # Paginate Get-SPOContainer - returns max 200 items per call plus a token at index 200
@@ -138,8 +141,7 @@ ForEach ($Geo in $Geos) {
 
 # --- Output ---
 
-$Report | Sort-Object GeoLocation, 'Workspace Name' | Out-GridView -Title 'Loop Workspaces - All Regions'
-$Report | Export-Csv -NoTypeInformation -Path $CSVOutputFile
+$Report | Sort-Object GeoLocation, 'Workspace Name' | Export-Csv -NoTypeInformation -Path $CSVOutputFile
 
 Write-Host "`n=== Summary by Region ==="
 $Report | Group-Object GeoLocation | Select-Object Name,
