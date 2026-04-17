@@ -1,10 +1,48 @@
-# Report-LoopWorkSpaces.PS1
-# Reports Loop workspaces across all SharePoint Online tenants/geo locations.
-# V2.1 Multi-tenant support
-#
-# Usage:
-#   .\Report-LoopWorkspace.ps1
-#   .\Report-LoopWorkspace.ps1 -Tenants @{ NAM = 'https://contoso-admin.sharepoint.com'; CAN = 'https://contoso-ca-admin.sharepoint.com' }
+<#
+.SYNOPSIS
+    Reports Microsoft Loop workspaces across one or more SharePoint Online tenants.
+
+.DESCRIPTION
+    Connects to one or more SharePoint Online admin centers and enumerates all Loop
+    workspaces using Get-SPOContainer. For each workspace, resolves the owner's display
+    name, UPN, department, and Microsoft 365 license status via the Graph API. Handles
+    pagination for tenants with more than 200 workspaces.
+
+    Outputs a combined CSV tagged by region and prints a per-region summary to the
+    console. Intended for scheduled execution via Task Scheduler with Start-Transcript
+    for logging.
+
+    Workspaces with no individual owner are reported as group-owned. Workspaces whose
+    owner has no assigned licenses are reported as Unlicensed with remaining fields blank.
+
+.PARAMETER Tenants
+    Hashtable mapping a short region label to its SharePoint Online admin URL.
+    Defaults to the NAM and CAN tenants defined in the script. Override at runtime
+    to target a subset of tenants or add additional regions without editing the script.
+
+.EXAMPLE
+    .\Report-LoopWorkspace.ps1
+
+    Runs against the default NAM and CAN tenants defined in the param block.
+
+.EXAMPLE
+    .\Report-LoopWorkspace.ps1 -Tenants @{ NAM = 'https://contoso-admin.sharepoint.com' }
+
+    Runs against a single tenant, useful for testing or targeted reporting.
+
+.NOTES
+    Prerequisites:
+      - Microsoft.Graph PowerShell SDK with Directory.Read.All scope
+      - Microsoft.Online.SharePoint.PowerShell module
+      - SharePoint Administrator role in each target tenant
+
+    All tenants are assumed to share a single Entra ID. If a tenant has a separate
+    Entra ID, Get-MgUser calls will fail for users in that tenant. Contact your
+    infrastructure team about configuring a Multi-Tenant Organization (MTO) in
+    Entra ID to address cross-tenant user resolution.
+
+    Output: C:\temp\LoopWorkspaces.csv
+#>
 
 param(
     [hashtable]$Tenants = @{
@@ -90,11 +128,9 @@ ForEach ($Geo in $Geos) {
                 Property    = 'DisplayName', 'UserPrincipalName', 'Department'
                 ErrorAction = 'Stop'
             }
-            Try {
-                $User = Get-MgUser @MgUserSplat
-            }
-            Catch {
-                Write-Host ("could not resolve owner {0} - skipping" -f $Owner) -ForegroundColor Yellow
+            Try { $User = Get-MgUser @MgUserSplat } Catch { $User = $null }
+            If (-not $User) {
+                Write-Host ("Could not resolve owner {0} - skipping" -f $Owner) -ForegroundColor Yellow
                 Continue
             }
 
@@ -104,6 +140,8 @@ ForEach ($Geo in $Geos) {
             $LicenseStatus = 'Unlicensed'
 
             [array]$Licenses = Get-MgUserLicenseDetail -UserId $Owner
+            If (-not $Licenses) { Continue }
+
             $LoopPlan = $Licenses | Select-Object -ExpandProperty ServicePlans |
             Where-Object { $_.ServicePlanId -eq $LoopServicePlan } |
             Select-Object -ExpandProperty ProvisioningStatus
@@ -124,7 +162,10 @@ ForEach ($Geo in $Geos) {
 
         $Report.Add([PSCustomObject]@{
                 GeoLocation      = $Geo.GeoLocation
+                ContainerId      = $Space.ContainerId
+                App              = $Details.OwningApplicationName
                 'Workspace Name' = $Space.ContainerName
+                Description      = $Space.Description
                 Owner            = $OwnerName
                 UPN              = $UserUPN
                 Department       = $Dept
@@ -134,7 +175,6 @@ ForEach ($Geo in $Geos) {
                 Created          = $Details.CreatedOn
                 SiteURL          = $Details.ContainerSiteUrl
                 'Storage (MB)'   = '{0:N2}' -f ($Details.StorageUsedInBytes / 1MB)
-                ContainerId      = $Space.ContainerId
             })
     }
 }
