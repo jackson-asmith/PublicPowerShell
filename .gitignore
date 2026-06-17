@@ -1,0 +1,34 @@
+# macOS metadata - created automatically by Finder, never useful in version control
+.DS_Store
+**/.DS_Store
+
+# Windows thumbnail/desktop metadata
+Thumbs.db
+Desktop.ini
+
+# PowerShell project files - IDE-specific, not part of the scripts themselves
+*.pssproj
+*.psproj.user
+*.psrc.bak
+
+# Secrets and credentials - scripts in this repo often handle sensitive systems
+# (AD, Exchange, certificates). Never commit keys, certs, or credential files.
+*secret*
+*credential*
+*password*
+*.key
+*.pem
+*.pfx
+*.p12
+
+# Editor and IDE config - keep these local; teammates may use different editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Log files - generated output, not source
+*.log
+
+# Claude Code internal directories - not part of the project
+.claude/
