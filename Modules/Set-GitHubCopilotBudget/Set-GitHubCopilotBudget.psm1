@@ -18,10 +18,19 @@ function Set-GitHubCopilotBudget {
     .PARAMETER GithubToken
     A GitHub token with enterprise billing permissions. Defaults to the GITHUB_TOKEN
     environment variable.
+    .PARAMETER PreventFurtherUsage
+    When set, each user budget hard-stops the user once the amount is reached. Omitted
+    (the default), the budget is a soft/tracking threshold and the user continues into
+    billable overage - the model for power users who pay per use and are charged back.
     .EXAMPLE
     Set-GitHubCopilotBudget -Enterprise contoso -CostCenterId 1a2b3c -GithubToken $token
 
-    Syncs every power user's Copilot budget to the $100 default.
+    Syncs every power user's Copilot budget to the $100 default. Users are not hard-stopped;
+    overage beyond the budget remains billable (pay-per-use).
+    .EXAMPLE
+    Set-GitHubCopilotBudget -Enterprise contoso -CostCenterId 1a2b3c -PreventFurtherUsage
+
+    Syncs budgets that hard-stop each user at the amount (rationing tier).
     .EXAMPLE
     Set-GitHubCopilotBudget -Enterprise contoso -CostCenterId 1a2b3c -PowerUserBudget 250 -WhatIf
 
@@ -48,7 +57,9 @@ function Set-GitHubCopilotBudget {
         [decimal]$PowerUserBudget = 100,
 
         [ValidateNotNullOrEmpty()]
-        [string]$GithubToken = $env:GITHUB_TOKEN
+        [string]$GithubToken = $env:GITHUB_TOKEN,
+
+        [switch]$PreventFurtherUsage
     )
 
     if ([string]::IsNullOrWhiteSpace($GithubToken)) {
@@ -74,11 +85,12 @@ function Set-GitHubCopilotBudget {
         $existingBudgetId = ($existingBudgets | Where-Object { $_.budget_entity_name -eq $user }).id
 
         $budgetParams = @{
-            Username         = $user
-            Enterprise       = $Enterprise
-            Headers          = $headers
-            BudgetAmount     = $PowerUserBudget
-            ExistingBudgetId = $existingBudgetId
+            Username            = $user
+            Enterprise          = $Enterprise
+            Headers             = $headers
+            BudgetAmount        = $PowerUserBudget
+            ExistingBudgetId    = $existingBudgetId
+            PreventFurtherUsage = [bool]$PreventFurtherUsage
         }
         Set-UserBudget @budgetParams
     }
@@ -158,12 +170,14 @@ function Set-UserBudget {
         [Parameter(Mandatory)]
         [decimal]$BudgetAmount,
 
-        [string]$ExistingBudgetId
+        [string]$ExistingBudgetId,
+
+        [bool]$PreventFurtherUsage = $false
     )
 
     $body = @{
         budget_amount         = $BudgetAmount
-        prevent_further_usage = $true
+        prevent_further_usage = $PreventFurtherUsage
         budget_scope          = 'user'
         budget_entity_name    = ''
         budget_type           = 'BundlePricing'

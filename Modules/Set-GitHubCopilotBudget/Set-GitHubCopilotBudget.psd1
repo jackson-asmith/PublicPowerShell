@@ -12,7 +12,7 @@
 RootModule = 'Set-GitHubCopilotBudget.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.0.0'
+ModuleVersion = '1.1.0'
 
 # Supported PSEditions
 CompatiblePSEditions = 'Core'
@@ -107,7 +107,7 @@ PrivateData = @{
         # IconUri = ''
 
         # ReleaseNotes of this module
-        ReleaseNotes = '1.0.0: Promoted from the Set-GitHubCopilotUsage.ps1 script to a module. Renamed Usage to Budget; made Enterprise and CostCenterId mandatory; declared OutputType; token guard now throws a terminating error; helper functions kept private.'
+        ReleaseNotes = '1.1.0: Added -PreventFurtherUsage switch to control whether budgets hard-stop the user. Default behavior changed: budgets no longer hard-stop (prevent_further_usage now defaults to false), so power users continue into billable overage (pay-per-use) unless -PreventFurtherUsage is passed. 1.0.0: Promoted from the Set-GitHubCopilotUsage.ps1 script to a module. Renamed Usage to Budget; made Enterprise and CostCenterId mandatory; declared OutputType; token guard now throws a terminating error; helper functions kept private.'
 
         # Prerelease string of this module
         # Prerelease = ''
